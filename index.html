@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>怪獸合體數字戰：混合四則 AI 挑戰</title>
+  <style>
+    body {
+      font-family: Arial, "Microsoft JhengHei", sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+      background: #f3f4f6;
+    }
+    h1 {
+      margin-top: 10px;
+      margin-bottom: 5px;
+    }
+    #subtitle {
+      font-size: 14px;
+      color: #555;
+      margin-bottom: 15px;
+    }
+    #game-container {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    #top-bar {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    #level {
+      font-size: 16px;
+    }
+    #question-area {
+      margin: 15px 0;
+    }
+    #question-label {
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+    #question {
+      font-size: 36px;
+      margin: 10px 0;
+    }
+    #cards-row {
+      margin-top: 10px;
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .card {
+      min-width: 40px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #e5f0ff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      font-size: 20px;
+      font-weight: bold;
+    }
+    .card-op {
+      background: #ffe5f0;
+    }
+    #answer {
+      font-size: 24px;
+      padding: 5px 10px;
+      width: 160px;
+      text-align: center;
+      margin-top: 5px;
+    }
+    button {
+      font-size: 18px;
+      padding: 8px 16px;
+      margin: 10px 5px;
+      cursor: pointer;
+      border-radius: 8px;
+      border: none;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      background: #3b82f6;
+      color: #fff;
+    }
+    button:disabled {
+      background: #a5b4fc;
+      cursor: default;
+      box-shadow: none;
+    }
+    #feedback {
+      height: 50px;
+      margin-top: 10px;
+      font-size: 16px;
+      color: #111827;
+    }
+    #stats {
+      margin-top: 16px;
+      text-align: left;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    #stats-title {
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+    hr {
+      margin: 16px 0;
+    }
+    #timeUsed {
+      font-weight: bold;
+    }
+    #streak {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>怪獸合體數字戰</h1>
+  <div id="subtitle">五年級混合四則運算｜抽卡式 AI 自適應練習</div>
+
+  <div id="game-container">
+    <div id="top-bar">
+      <div>時間：<span id="timeUsed">0</span> 秒</div>
+      <div>題目：第 <span id="currentQ">1</span> 題 / <span id="totalQ">12</span> 題</div>
+      <div id="level">等級：<strong>Lv<span id="levelNum">2</span></strong></div>
+    </div>
+
+    <div id="question-area">
+      <div id="question-label">怪獸公式：</div>
+      <div id="question">請按「開始抽卡」</div>
+      <div id="cards-row"></div>
+    </div>
+
+    <div>
+      <input type="number" id="answer" placeholder="請輸入答案" disabled>
+    </div>
+
+    <div>
+      <button id="startBtn">開始抽卡</button>
+      <button id="submitBtn" disabled>送出答案</button>
+      <button id="nextBtn" disabled>下一隻怪獸</button>
+    </div>
+
+    <div id="feedback"></div>
+
+    <hr>
+
+    <div id="stats">
+      <div id="stats-title">AI 小教練分析（即時更新）：</div>
+      總作答題數：<span id="totalCount">0</span> 題<br>
+      總答對題數：<span id="correctCount">0</span> 題<br>
+      整體正確率：<span id="accuracy">0</span>%<br>
+      <br>
+      【各運算表現】<br>
+      加法：<span id="plusStats">0 / 0</span><br>
+      減法：<span id="minusStats">0 / 0</span><br>
+      乘法：<span id="timesStats">0 / 0</span><br>
+      除法：<span id="divideStats">0 / 0</span><br>
+      <br>
+      目前連對／連錯指標：<span id="streak">0</span><br>
+      最高達成等級：Lv<span id="maxLevel">2</span><br>
+    </div>
+  </div>
+
+  <script>
+    // ----- 基本參數 -----
+    const MAX_QUESTIONS = 12; // 一輪幾題，可自行調整
+    let currentQuestionIndex = 0;
+    let level = 2; // 起始等級
+    let maxLevelReached = 2;
+    let streakCount = 0; // 正數 = 連對，負數 = 連錯
+    let correctAnswer = null;
+    let usedOpsThisQ = []; // 當前題目用到哪些運算
+    let gameStarted = false;
+    let startTime = null;
+    let timerInterval = null;
+
+    const stats = {
+      total: 0,
+      correct: 0,
+      '+': { correct: 0, total: 0 },
+      '-': { correct: 0, total: 0 },
+      '×': { correct: 0, total: 0 },
+      '÷': { correct: 0, total: 0 }
+    };
+
+    // ----- DOM -----
+    const questionEl = document.getElementById('question');
+    const cardsRowEl = document.getElementById('cards-row');
+    const answerEl = document.getElementById('answer');
+    const startBtn = document.getElementById('startBtn');
+    const submitBtn = document.getElementById('submitBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const feedbackEl = document.getElementById('feedback');
+
+    const currentQEl = document.getElementById('currentQ');
+    const totalQEl = document.getElementById('totalQ');
+    const levelNumEl = document.getElementById('levelNum');
+    const timeUsedEl = document.getElementById('timeUsed');
+
+    const correctCountEl = document.getElementById('correctCount');
+    const totalCountEl = document.getElementById('totalCount');
+    const accuracyEl = document.getElementById('accuracy');
+    const plusStatsEl = document.getElementById('plusStats');
+    const minusStatsEl = document.getElementById('minusStats');
+    const timesStatsEl = document.getElementById('timesStats');
+    const divideStatsEl = document.getElementById('divideStats');
+    const streakEl = document.getElementById('streak');
+    const maxLevelEl = document.getElementById('maxLevel');
+
+    totalQEl.textContent = MAX_QUESTIONS;
+
+    // ----- 工具 -----
+    function randInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function evaluateExpression(exprJs) {
+      try {
+        const val = Function('return ' + exprJs)();
+        return Math.round(val);
+      } catch (e) {
+        console.error('表達式錯誤：', exprJs, e);
+        return null;
+      }
+    }
+
+    function clearCards() {
+      cardsRowEl.innerHTML = '';
+    }
+
+    function makeCard(text, isOp) {
+      const span = document.createElement('span');
+      span.className = 'card' + (isOp ? ' card-op' : '');
+      span.textContent = text;
+      cardsRowEl.appendChild(span);
+    }
+
+    // ----- 題目產生：依等級產生混合運算 -----
+    function generateQuestion() {
+      clearCards();
+      usedOpsThisQ = [];
+
+      let exprDisplay = '';
+      let exprJs = '';
+
+      // Level 1：兩個運算（例如 + 和 ×）
+      if (level === 1) {
+        const pattern = randInt(1, 2);
+
+        if (pattern === 1) {
+          // 形式：a + b × c
+          const a = randInt(10, 99);
+          const b = randInt(2, 9);
+          const c = randInt(2, 9);
+          exprDisplay = `${a} + ${b} × ${c}`;
+          exprJs = `${a} + ${b}*${c}`;
+          usedOpsThisQ = ['+','×'];
+
+          makeCard(a, false);
+          makeCard('+', true);
+          makeCard(b, false);
+          makeCard('×', true);
+          makeCard(c, false);
+
+        } else {
+          // 形式：a × b − c（避免負數）
+          let a = randInt(2, 9);
+          let b = randInt(2, 9);
+          let c = randInt(5, 40);
+          let mid = a * b;
+          if (c > mid) c = randInt(1, mid - 1);
+          exprDisplay = `${a} × ${b} − ${c}`;
+          exprJs = `${a}*${b} - ${c}`;
+          usedOpsThisQ = ['×','-'];
+
+          makeCard(a, false);
+          makeCard('×', true);
+          makeCard(b, false);
+          makeCard('−', true);
+          makeCard(c, false);
+        }
+
+      // Level 2：三個運算
+      } else if (level === 2) {
+        const pattern = randInt(1, 2);
+
+        if (pattern === 1) {
+          // 形式：a + b × c − d
+          let ok = false;
+          let a, b, c, d, val;
+          while (!ok) {
+            a = randInt(10, 99);
+            b = randInt(2, 9);
+            c = randInt(2, 9);
+            d = randInt(1, 40);
+            const tmpExpr = `${a} + ${b}*${c} - ${d}`;
+            val = evaluateExpression(tmpExpr);
+            if (val !== null && val >= 0) ok = true;
+          }
+          exprDisplay = `${a} + ${b} × ${c} − ${d}`;
+          exprJs = `${a} + ${b}*${c} - ${d}`;
+          usedOpsThisQ = ['+','×','-'];
+
+          makeCard(a, false);
+          makeCard('+', true);
+          makeCard(b, false);
+          makeCard('×', true);
+          makeCard(c, false);
+          makeCard('−', true);
+          makeCard(d, false);
+
+        } else {
+          // 形式：a × b + c ÷ d（c ÷ d 整除）
+          const d = randInt(2, 9);
+          const q = randInt(2, 9);
+          const c = d * q;
+          const a = randInt(2, 9);
+          const b = randInt(2, 9);
+          exprDisplay = `${a} × ${b} + ${c} ÷ ${d}`;
+          exprJs = `${a}*${b} + ${c}/${d}`;
+          usedOpsThisQ = ['×','+','÷'];
+
+          makeCard(a, false);
+          makeCard('×', true);
+          makeCard(b, false);
+          makeCard('+', true);
+          makeCard(c, false);
+          makeCard('÷', true);
+          makeCard(d, false);
+        }
+
+      // Level 3：四則全上＋括號（保證用到 + - × ÷ 四種）
+      } else {
+        // 形式：(a × b + c) ÷ d − e
+        // 確保：(a*b + c) 能被 d 整除，且最後結果非負
+        let a, b, c, d, e, q, val;
+        let tries = 0;
+        while (true) {
+          tries++;
+          d = randInt(2, 9);
+          q = randInt(3, 15);          // ( ) ÷ d 的結果
+          const numerator = d * q;     // a*b + c
+          a = randInt(2, 9);
+          b = randInt(2, 9);
+          const ab = a * b;
+          c = numerator - ab;
+          if (c < 0) continue;        // 讓 c 非負比較自然
+          e = randInt(0, q - 1);      // 不讓結果負數
+          const tmpExpr = `( ${a}*${b} + ${c} ) / ${d} - ${e}`;
+          val = evaluateExpression(tmpExpr);
+          if (val !== null && val >= 0) break;
+          if (tries > 50) { // 真的卡住就放棄這模式，改簡單一點
+            level = 2;
+            return generateQuestion();
+          }
+        }
+
+        exprDisplay = `(${a} × ${b} + ${c}) ÷ ${d} − ${e}`;
+        exprJs = `(${a}*${b} + ${c}) / ${d} - ${e}`;
+        usedOpsThisQ = ['×','+','÷','-'];
+
+        makeCard('(', true);
+        makeCard(a, false);
+        makeCard('×', true);
+        makeCard(b, false);
+        makeCard('+', true);
+        makeCard(c, false);
+        makeCard(')', true);
+        makeCard('÷', true);
+        makeCard(d, false);
+        makeCard('−', true);
+        makeCard(e, false);
+      }
+
+      correctAnswer = evaluateExpression(exprJs);
+      questionEl.textContent = exprDisplay;
+      levelNumEl.textContent = level;
+      answerEl.value = '';
+      answerEl.focus();
+      feedbackEl.textContent = '';
+    }
+
+    // ----- 統計更新 -----
+    function updateStats(isCorrect) {
+      stats.total++;
+      if (isCorrect) stats.correct++;
+
+      usedOpsThisQ.forEach(op => {
+        if (!stats[op]) return;
+        stats[op].total++;
+        if (isCorrect) stats[op].correct++;
+      });
+
+      const accuracy = stats.total === 0
+        ? 0
+        : Math.round((stats.correct / stats.total) * 100);
+
+      totalCountEl.textContent = stats.total;
+      correctCountEl.textContent = stats.correct;
+      accuracyEl.textContent = accuracy;
+
+      plusStatsEl.textContent = `${stats['+'].correct} / ${stats['+'].total}`;
+      minusStatsEl.textContent = `${stats['-'].correct} / ${stats['-'].total}`;
+      timesStatsEl.textContent = `${stats['×'].correct} / ${stats['×'].total}`;
+      divideStatsEl.textContent = `${stats['÷'].correct} / ${stats['÷'].total}`;
+    }
+
+    // ----- AI 回饋 -----
+    function giveFeedback(isCorrect) {
+      let msg = '';
+      if (isCorrect) {
+        if (level === 3) {
+          msg = '太厲害了！連最高等級怪獸都被你打趴了！';
+        } else {
+          msg = '答對！怪獸被打退了一步，我來偷偷幫你升級看看～';
+        }
+      } else {
+        // 找出錯最多的運算
+        let worstOp = null;
+        let worstRate = 0;
+        ['+','-','×','÷'].forEach(op => {
+          const t = stats[op].total;
+          const c = stats[op].correct;
+          if (t >= 3) { // 有一定題數才算
+            const wrongRate = (t - c) / t;
+            if (wrongRate > worstRate) {
+              worstRate = wrongRate;
+              worstOp = op;
+            }
+          }
+        });
+
+        if (worstOp) {
+          const opName = { '+': '加法', '-': '減法', '×': '乘法', '÷': '除法' }[worstOp];
+          msg = `這題沒關係～AI 小教練發現你在「${opName}」錯比較多，我等等會多出幾題幫你練習。`;
+        } else {
+          msg = '這題錯了，先想想步驟順序：先乘除、再加減，等等下一題再試試看！';
+        }
+      }
+      feedbackEl.textContent = msg;
+    }
+
+    // ----- AI 調整難度 -----
+    function adjustLevel(isCorrect) {
+      if (isCorrect) {
+        if (streakCount >= 0) streakCount++;
+        else streakCount = 1;
+
+        if (streakCount >= 3 && level < 3) {
+          level++;
+          streakCount = 0;
+          feedbackEl.textContent += '（AI 小教練：你的表現很穩，我幫你升級到更難的怪獸！）';
+        }
+      } else {
+        if (streakCount <= 0) streakCount--;
+        else streakCount = -1;
+
+        if (streakCount <= -2 && level > 1) {
+          level--;
+          streakCount = 0;
+          feedbackEl.textContent += '（AI 小教練：先退回比較適合的等級，我們慢慢來。）';
+        }
+      }
+      streakEl.textContent = streakCount;
+      levelNumEl.textContent = level;
+
+      if (level > maxLevelReached) {
+        maxLevelReached = level;
+        maxLevelEl.textContent = maxLevelReached;
+      }
+    }
+
+    // ----- 檢查答案 -----
+    function checkAnswer() {
+      if (!gameStarted) return;
+      let userAns = parseInt(answerEl.value, 10);
+      if (isNaN(userAns)) {
+        feedbackEl.textContent = '請先輸入整數答案喔！';
+        return;
+      }
+      const isCorrect = (userAns === correctAnswer);
+      updateStats(isCorrect);
+      giveFeedback(isCorrect);
+      adjustLevel(isCorrect);
+
+      answerEl.disabled = true;
+      submitBtn.disabled = true;
+      nextBtn.disabled = false;
+    }
+
+    // ----- 下一題 or 結束 -----
+    function nextQuestion() {
+      if (!gameStarted) return;
+      currentQuestionIndex++;
+      if (currentQuestionIndex >= MAX_QUESTIONS) {
+        endGame();
+        return;
+      }
+      currentQEl.textContent = currentQuestionIndex + 1;
+      answerEl.disabled = false;
+      submitBtn.disabled = false;
+      nextBtn.disabled = true;
+      generateQuestion();
+    }
+
+    // ----- 開始遊戲 -----
+    function startGame() {
+      gameStarted = true;
+      currentQuestionIndex = 0;
+      level = 2;
+      maxLevelReached = 2;
+      streakCount = 0;
+      streakEl.textContent = 0;
+      levelNumEl.textContent = level;
+      maxLevelEl.textContent = maxLevelReached;
+      currentQEl.textContent = 1;
+
+      // 重置統計
+      stats.total = 0;
+      stats.correct = 0;
+      ['+','-','×','÷'].forEach(op => {
+        stats[op].total = 0;
+        stats[op].correct = 0;
+      });
+      updateStats(false); // 只是刷新畫面，不會影響計算
+
+      // 計時
+      if (timerInterval) clearInterval(timerInterval);
+      startTime = Date.now();
+      timerInterval = setInterval(() => {
+        const diffSec = Math.floor((Date.now() - startTime) / 1000);
+        timeUsedEl.textContent = diffSec;
+      }, 1000);
+
+      startBtn.disabled = true;
+      answerEl.disabled = false;
+      submitBtn.disabled = false;
+      nextBtn.disabled = true;
+
+      generateQuestion();
+    }
+
+    // ----- 結束遊戲 -----
+    function endGame() {
+      gameStarted = false;
+      answerEl.disabled = true;
+      submitBtn.disabled = true;
+      nextBtn.disabled = true;
+      startBtn.disabled = false;
+      if (timerInterval) clearInterval(timerInterval);
+
+      const accuracy = stats.total === 0
+        ? 0
+        : Math.round((stats.correct / stats.total) * 100);
+
+      questionEl.textContent = '本輪怪獸已全部擊敗！';
+      feedbackEl.textContent =
+        `AI 小教練總結：一共作答 ${stats.total} 題，答對 ${stats.correct} 題，正確率 ${accuracy}% ，最高挑戰到 Lv${maxLevelReached}！`;
+      clearCards();
+    }
+
+    // ----- 事件 -----
+    startBtn.addEventListener('click', startGame);
+    submitBtn.addEventListener('click', checkAnswer);
+    nextBtn.addEventListener('click', nextQuestion);
+
+    answerEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !submitBtn.disabled) {
+        checkAnswer();
+      }
+    });
+  </script>
+</body>
+</html>
